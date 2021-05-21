@@ -32,6 +32,11 @@ type Client struct {
 		fullName string
 		email    string
 	}
+	creds struct {
+		username      string
+		password      string
+		securityToken string
+	}
 	clientID      string
 	apiVersion    string
 	baseURL       string
@@ -66,10 +71,6 @@ func (client *Client) SetSidLoc(sid string, loc string) {
 
 // Query runs an SOQL query. q could either be the SOQL string or the nextRecordsURL.
 func (client *Client) Query(q string) (*QueryResult, error) {
-	if !client.isLoggedIn() {
-		return nil, ErrAuthentication
-	}
-
 	var u string
 	if strings.HasPrefix(q, "/services/data") {
 		// q is nextRecordsURL.
@@ -111,11 +112,6 @@ func (client *Client) SObject(typeName ...string) *SObject {
 		obj.setType(typeName[0])
 	}
 	return obj
-}
-
-// isLoggedIn returns if the login to salesforce is successful.
-func (client *Client) isLoggedIn() bool {
-	return client.sessionID != ""
 }
 
 // LoginPassword signs into salesforce using password. token is optional if trusted IP is configured.
@@ -193,9 +189,15 @@ func (client *Client) LoginPassword(username, password, token string) error {
 	client.user.name = loginResponse.UserName
 	client.user.email = loginResponse.UserEmail
 	client.user.fullName = loginResponse.UserFullName
+	client.creds.username = username
+	client.creds.password = password
+	client.creds.securityToken = token
 
 	return nil
 }
+
+// ErrorUnauthenticated is returned when the call was unauthorized
+var ErrorUnauthenticated = errors.New("invalid authentication")
 
 // httpRequest executes an HTTP request to the salesforce server and returns the response data in byte buffer.
 func (client *Client) httpRequest(method, url string, body io.Reader) ([]byte, error) {
@@ -216,6 +218,18 @@ func (client *Client) httpRequest(method, url string, body io.Reader) ([]byte, e
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't read response body")
+	}
+
+	// If request returned StatusUnauthorized, it means we have to
+	// refresh login and try again
+	if resp.StatusCode == http.StatusUnauthorized {
+		err := client.LoginPassword(client.creds.username, client.creds.password, client.creds.securityToken)
+		if err != nil {
+			return nil, errors.Wrap(ErrorUnauthenticated, fmt.Sprintf("couldn't refresh session id: %s", err.Error()))
+		}
+
+		// Authentication was refreshed, call it again
+		return client.httpRequest(method, url, body)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {

@@ -30,10 +30,6 @@ func (client *Client) UnTooling() {
 
 // ExecuteAnonymous executes a body of Apex code
 func (client *Client) ExecuteAnonymous(apexBody string) (*ExecuteAnonymousResult, error) {
-	if !client.isLoggedIn() {
-		return nil, ErrAuthentication
-	}
-
 	// Create the endpoint
 	formatString := "%s/services/data/v%s/tooling/executeAnonymous/?anonymousBody=%s"
 	baseURL := client.instanceURL
