@@ -46,7 +46,7 @@ func requireClient(t *testing.T, skippable bool) *Client {
 func TestClient_LoginPassword(t *testing.T) {
 	checkCredentialsAndSkip(t)
 
-	client := NewClient(sfURL, DefaultClientID, DefaultAPIVersion)
+	client := NewClient(sfURL, DefaultClientID, "51.0")
 	if client == nil {
 		t.Fatal()
 	}
@@ -54,7 +54,7 @@ func TestClient_LoginPassword(t *testing.T) {
 	// Use token
 	err := client.LoginPassword(sfUser, sfPass, sfToken)
 	if err != nil {
-		t.Fail()
+		t.Error(err)
 	} else {
 		log.Println(logPrefix, "sessionID:", client.sessionID)
 	}
@@ -118,7 +118,10 @@ func TestClient_Query2(t *testing.T) {
 	}
 	if len(result.Records) > 0 {
 		comment1 := &result.Records[0]
-		case1 := comment1.SObjectField("Case", "Parent").Get()
+		case1, err := comment1.SObjectField("Case", "Parent").Get()
+		if err != nil {
+			t.Error(err)
+		}
 		if comment1.StringField("ParentId") != case1.ID() {
 			t.Fail()
 		}
